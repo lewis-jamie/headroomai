@@ -1093,6 +1093,14 @@ class LiteLLMBackend(Backend):
 
             try:
                 kwargs["provider"] = self.provider
+                mapped_provider = self.provider
+                if self.provider == "llamacpp":
+                    mapped_provider = "llamafile"
+                elif self.provider == "llama":
+                    mapped_provider = "meta_llama"
+                kwargs["custom_llm_provider"] = mapped_provider
+                if "base_url" in kwargs:
+                    kwargs["api_base"] = kwargs["base_url"]
             except Exception:
                 pass
             logger.debug(f"LiteLLM OpenAI request: model={litellm_model} provider={self.provider}")
