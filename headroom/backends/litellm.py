@@ -741,7 +741,11 @@ class LiteLLMBackend(Backend):
             # Inform LiteLLM of the underlying provider when available so it can
             # route requests correctly (some providers require explicit provider).
             try:
+                # LiteLLM prefers explicit custom_llm_provider / api_base params
                 kwargs["provider"] = self.provider
+                kwargs["custom_llm_provider"] = self.provider
+                if "base_url" in kwargs:
+                    kwargs["api_base"] = kwargs["base_url"]
             except Exception:
                 pass
             logger.debug(f"LiteLLM request: model={litellm_model} provider={self.provider}")
@@ -850,7 +854,11 @@ class LiteLLMBackend(Backend):
 
             # Ensure provider is passed to LiteLLM where required.
             try:
+                # Add both provider and the LiteLLM expected custom_llm_provider/api_base
                 kwargs["provider"] = self.provider
+                kwargs["custom_llm_provider"] = self.provider
+                if "base_url" in kwargs:
+                    kwargs["api_base"] = kwargs["base_url"]
             except Exception:
                 pass
             msg_id = f"msg_{uuid.uuid4().hex[:24]}"
