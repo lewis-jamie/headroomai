@@ -304,6 +304,33 @@ PROVIDER_REGISTRY: dict[str, ProviderConfig] = {
         env_vars=["OPENROUTER_API_KEY"],
         model_format_hint="anthropic/claude-3.5-sonnet, openai/gpt-4o, etc.",
     ),
+    "ollama": ProviderConfig(
+        name="ollama",
+        display_name="Ollama",
+        model_map={},  # pass-through to Ollama model names (name:tag)
+        pass_through=True,
+        uses_region=False,
+        env_vars=["OLLAMA_API_KEY", "OLLAMA_HOST"],
+        model_format_hint="qwen2.5-coder:3b, forge-geralt-v6:latest",
+    ),
+    "vllm": ProviderConfig(
+        name="vllm",
+        display_name="vLLM (local/hosted)",
+        model_map={},  # pass-through
+        pass_through=True,
+        uses_region=False,
+        env_vars=["VLLM_HOST", "VLLM_API_KEY"],
+        model_format_hint="model name as exposed by your vLLM HTTP server",
+    ),
+    "llama": ProviderConfig(
+        name="llama",
+        display_name="Llama (local/hosted)",
+        model_map={},  # pass-through
+        pass_through=True,
+        uses_region=False,
+        env_vars=["LLAMA_HOST", "LLAMA_API_KEY"],
+        model_format_hint="model name as exposed by your Llama-serving endpoint",
+    ),
     "azure": ProviderConfig(
         name="azure",
         display_name="Azure OpenAI",
