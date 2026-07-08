@@ -322,15 +322,6 @@ PROVIDER_REGISTRY: dict[str, ProviderConfig] = {
         env_vars=["VLLM_HOST", "VLLM_API_KEY"],
         model_format_hint="model name as exposed by your vLLM HTTP server",
     ),
-    "llamacpp": ProviderConfig(
-        name="llamacpp",
-        display_name="llama.cpp (local)",
-        model_map={},  # pass-through for local llamacpp servers
-        pass_through=True,
-        uses_region=False,
-        env_vars=["LLAMA_HOST", "LLAMA_API_KEY"],
-        model_format_hint="axe-phantom-8b-claude-distill-Q4_K_M.gguf",
-    ),
     "llama": ProviderConfig(
         name="llama",
         display_name="Llama (local/hosted)",
@@ -497,14 +488,13 @@ class LiteLLMBackend(Backend):
                 region_prefix = _bedrock_region_prefix(self.region or "us-east-1")
                 return f"bedrock/{region_prefix}.anthropic.{anthropic_model}-v1:0"
 
-        # Pass-through providers: do not prepend provider prefix here.
-        # Instead we prefer to pass the raw model name and supply
-        # `custom_llm_provider` / `api_base` to LiteLLM so it can route correctly.
+        # Pass-through providers: prepend provider prefix
         if self._config.pass_through:
+            # If already has provider prefix, use as-is
             if anthropic_model.startswith(f"{self.provider}/"):
-                # strip the provider prefix if present
-                return anthropic_model.split("/", 1)[1]
-            return anthropic_model
+                return anthropic_model
+            # Otherwise prepend provider/
+            return f"{self.provider}/{anthropic_model}"
 
         # If already has provider prefix, use as-is
         if "/" in anthropic_model:
@@ -718,16 +708,6 @@ class LiteLLMBackend(Backend):
                 elif self.provider in ("vertex_ai", "vertex_ai_beta"):
                     kwargs["vertex_location"] = self.region
 
-            # Provider-specific base URL support (local servers like llamacpp/vllm/ollama)
-            # Allow operator to set LLAMA_HOST, VLLM_HOST, or OLLAMA_HOST to override.
-            env = os.environ if 'os' in globals() else {}
-            if env.get("LLAMA_HOST"):
-                kwargs.setdefault("base_url", env.get("LLAMA_HOST"))
-            elif env.get("VLLM_HOST"):
-                kwargs.setdefault("base_url", env.get("VLLM_HOST"))
-            elif env.get("OLLAMA_HOST"):
-                kwargs.setdefault("base_url", env.get("OLLAMA_HOST"))
-            # end provider-specific base_url
             # Forward API key from request headers if present.
             # Skip for Bedrock/Vertex: they use env-based auth (AWS SigV4 / Google ADC).
             # Forwarding x-api-key (e.g. sk-ant-dummy) would override their credentials.
@@ -739,25 +719,10 @@ class LiteLLMBackend(Backend):
                 elif headers.get("x-api-key"):
                     kwargs["api_key"] = headers["x-api-key"]
 
-            # Inform LiteLLM of the underlying provider when available so it can
-            # route requests correctly (some providers require explicit provider).
-            try:
-                # LiteLLM prefers explicit custom_llm_provider / api_base params
-                kwargs["provider"] = self.provider
-                # Map internal provider names to litellm-recognized providers when needed
-                mapped_provider = self.provider
-                if self.provider == "llamacpp":
-                    mapped_provider = "llamafile"
-                elif self.provider == "llama":
-                    mapped_provider = "meta_llama"
-                kwargs["custom_llm_provider"] = mapped_provider
-                if "base_url" in kwargs:
-                    kwargs["api_base"] = kwargs["base_url"]
-            except Exception:
-                pass
-            logger.info(
-                f\"LiteLLM call: model={litellm_model} provider={self.provider} "
-                f\"custom_llm_provider={kwargs.get('custom_llm_provider')} api_base={kwargs.get('api_base')} base_url={kwargs.get('base_url')}\")\n\n            # Make the call\n            response = await acompletion(**kwargs)
+            logger.debug(f"LiteLLM request: model={litellm_model}")
+
+            # Make the call
+            response = await acompletion(**kwargs)
 
             # Convert to Anthropic format
             anthropic_response = self._to_anthropic_response(response, original_model)
@@ -858,15 +823,6 @@ class LiteLLMBackend(Backend):
                 elif headers.get("x-api-key"):
                     kwargs["api_key"] = headers["x-api-key"]
 
-            # Ensure provider is passed to LiteLLM where required.
-            try:
-                # Add both provider and the LiteLLM expected custom_llm_provider/api_base
-                kwargs["provider"] = self.provider
-                kwargs["custom_llm_provider"] = self.provider
-                if "base_url" in kwargs:
-                    kwargs["api_base"] = kwargs["base_url"]
-            except Exception:
-                pass
             msg_id = f"msg_{uuid.uuid4().hex[:24]}"
 
             # Emit message_start
@@ -1091,19 +1047,10 @@ class LiteLLMBackend(Backend):
                 elif headers.get("x-api-key"):
                     kwargs["api_key"] = headers["x-api-key"]
 
-            try:
-                kwargs["provider"] = self.provider
-                mapped_provider = self.provider
-                if self.provider == "llamacpp":
-                    mapped_provider = "llamafile"
-                elif self.provider == "llama":
-                    mapped_provider = "meta_llama"
-                kwargs["custom_llm_provider"] = mapped_provider
-                if "base_url" in kwargs:
-                    kwargs["api_base"] = kwargs["base_url"]
-            except Exception:
-                pass
-            logger.info(\n+                f\"LiteLLM OpenAI call: model={litellm_model} provider={self.provider} \"\n+                f\"custom_llm_provider={kwargs.get('custom_llm_provider')} api_base={kwargs.get('api_base')} base_url={kwargs.get('base_url')}\")\n+\n+            # Make the call\n+            response = await acompletion(**kwargs)
+            logger.debug(f"LiteLLM OpenAI request: model={litellm_model}")
+
+            # Make the call
+            response = await acompletion(**kwargs)
 
             # Build the usage block. LiteLLM normalizes prompt-cache stats from
             # multiple providers (Anthropic, Bedrock-Claude, OpenAI prompt-caching,
