@@ -427,6 +427,10 @@ def _litellm_prepare_kwargs(provider: str, kwargs: dict[str, Any], provider_hint
         mapped = "meta_llama"
 
     model = kwargs.get("model")
+    # Remove any accidental litellm/ prefix that may have been injected upstream
+    if isinstance(model, str) and model.startswith("litellm/"):
+        model = model.split("/", 1)[1]
+        kwargs["model"] = model
     # If model contains a provider segment (e.g., 'ollama/qwen...'),
     # prefer that provider and strip everything up to it so litellm resolves correctly.
     if isinstance(model, str) and "/" in model:
