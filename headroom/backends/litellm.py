@@ -410,6 +410,31 @@ def _parse_tool_arguments(arguments: Any) -> Any:
     return arguments
 
 
+def _litellm_prepare_kwargs(provider: str, kwargs: dict[str, Any]) -> None:
+    """Normalize kwargs for LiteLLM calls for local/non-standard providers.
+
+    - Map local provider aliases to litellm provider names (llamacpp -> llamafile).
+    - Strip provider/ prefix from model if caller supplied it (e.g., 'llamacpp/model').
+    - Copy base_url -> api_base when present.
+    - Set custom_llm_provider to the mapped provider so litellm resolves correctly.
+    """
+    mapped = provider
+    if provider == "llamacpp":
+        mapped = "llamafile"
+    elif provider == "llama":
+        mapped = "meta_llama"
+
+    model = kwargs.get("model")
+    if isinstance(model, str) and "/" in model:
+        prefix, rest = model.split("/", 1)
+        if prefix == provider:
+            kwargs["model"] = rest
+
+    kwargs["custom_llm_provider"] = mapped
+    if kwargs.get("base_url"):
+        kwargs["api_base"] = kwargs.get("base_url")
+
+
 class LiteLLMBackend(Backend):
     """Backend using LiteLLM for multi-provider support.
 
@@ -719,7 +744,9 @@ class LiteLLMBackend(Backend):
                 elif headers.get("x-api-key"):
                     kwargs["api_key"] = headers["x-api-key"]
 
-            logger.debug(f"LiteLLM request: model={litellm_model}")
+            # Prepare kwargs for LiteLLM provider resolution (local servers)
+            _litellm_prepare_kwargs(self.provider, kwargs)
+            logger.debug(f"LiteLLM request: model={kwargs.get('model')} provider={self.provider} custom={kwargs.get('custom_llm_provider')}")
 
             # Make the call
             response = await acompletion(**kwargs)
@@ -822,6 +849,10 @@ class LiteLLMBackend(Backend):
                     kwargs["api_key"] = auth_header[7:]
                 elif headers.get("x-api-key"):
                     kwargs["api_key"] = headers["x-api-key"]
+
+            # Prepare kwargs for LiteLLM provider resolution (local servers)
+            _litellm_prepare_kwargs(self.provider, kwargs)
+            logger.debug(f"LiteLLM stream request: model={kwargs.get('model')} provider={self.provider} custom={kwargs.get('custom_llm_provider')}")
 
             msg_id = f"msg_{uuid.uuid4().hex[:24]}"
 
@@ -1047,7 +1078,9 @@ class LiteLLMBackend(Backend):
                 elif headers.get("x-api-key"):
                     kwargs["api_key"] = headers["x-api-key"]
 
-            logger.debug(f"LiteLLM OpenAI request: model={litellm_model}")
+            # Prepare kwargs for LiteLLM provider resolution (local servers)
+            _litellm_prepare_kwargs(self.provider, kwargs)
+            logger.debug(f"LiteLLM OpenAI request: model={kwargs.get('model')} provider={self.provider} custom={kwargs.get('custom_llm_provider')}")
 
             # Make the call
             response = await acompletion(**kwargs)
@@ -1221,6 +1254,10 @@ class LiteLLMBackend(Backend):
                     kwargs["api_key"] = auth_header[7:]
                 elif headers.get("x-api-key"):
                     kwargs["api_key"] = headers["x-api-key"]
+
+            # Prepare kwargs for LiteLLM provider resolution (local servers)
+            _litellm_prepare_kwargs(self.provider, kwargs)
+            logger.debug(f"LiteLLM OpenAI stream request: model={kwargs.get('model')} provider={self.provider} custom={kwargs.get('custom_llm_provider')}")
 
             response = await acompletion(**kwargs)
 
