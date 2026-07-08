@@ -743,7 +743,13 @@ class LiteLLMBackend(Backend):
             try:
                 # LiteLLM prefers explicit custom_llm_provider / api_base params
                 kwargs["provider"] = self.provider
-                kwargs["custom_llm_provider"] = self.provider
+                # Map internal provider names to litellm-recognized providers when needed
+                mapped_provider = self.provider
+                if self.provider == "llamacpp":
+                    mapped_provider = "llamafile"
+                elif self.provider == "llama":
+                    mapped_provider = "meta_llama"
+                kwargs["custom_llm_provider"] = mapped_provider
                 if "base_url" in kwargs:
                     kwargs["api_base"] = kwargs["base_url"]
             except Exception:
