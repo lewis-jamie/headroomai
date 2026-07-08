@@ -425,10 +425,28 @@ def _litellm_prepare_kwargs(provider: str, kwargs: dict[str, Any]) -> None:
         mapped = "meta_llama"
 
     model = kwargs.get("model")
+    # If model contains a provider segment (e.g., 'ollama/qwen...'),
+    # prefer that provider and strip everything up to it so litellm resolves correctly.
     if isinstance(model, str) and "/" in model:
-        prefix, rest = model.split("/", 1)
-        if prefix == provider:
+        parts = model.split("/")
+        # find any known provider segment in the path
+        found = None
+        for i, part in enumerate(parts):
+            if part in PROVIDER_REGISTRY or part in ("ollama", "vllm", "llama", "llamacpp", "openrouter"):
+                found = (i, part)
+                break
+        if found:
+            idx, seg = found
+            # rest after the provider segment
+            rest = "/".join(parts[idx + 1 :]) if len(parts) > idx + 1 else parts[-1]
             kwargs["model"] = rest
+            # map seg to litellm provider name if needed
+            seg_mapped = seg
+            if seg == "llamacpp":
+                seg_mapped = "llamafile"
+            elif seg == "llama":
+                seg_mapped = "meta_llama"
+            mapped = seg_mapped
 
     kwargs["custom_llm_provider"] = mapped
     if kwargs.get("base_url"):
