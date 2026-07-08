@@ -704,7 +704,22 @@ class LiteLLMBackend(Backend):
     ) -> BackendResponse:
         """Send message via LiteLLM."""
         original_model = body.get("model", "claude-3-5-sonnet-20241022")
-        litellm_model = self.map_model_id(original_model)
+        # Allow per-request provider prefix: e.g., "ollama/qwen2.5-coder:3b"
+        litellm_model = original_model
+        if isinstance(original_model, str) and "/" in original_model:
+            possible_prefix = original_model.split("/", 1)[0]
+            if possible_prefix in PROVIDER_REGISTRY or possible_prefix in ("ollama", "vllm", "llama", "llamacpp", "openrouter"):
+                # strip prefix so litellm receives raw model id and set custom provider later
+                litellm_model = original_model.split("/", 1)[1]
+                # also instruct helper to use that provider
+                kwargs_provider_hint = possible_prefix
+            else:
+                kwargs_provider_hint = None
+        else:
+            kwargs_provider_hint = None
+        # Map via configured backend for cases without explicit per-request provider
+        if kwargs_provider_hint is None:
+            litellm_model = self.map_model_id(original_model)
 
         try:
             # Convert messages
@@ -817,7 +832,18 @@ class LiteLLMBackend(Backend):
         are emitted based on what LiteLLM actually returns, not hardcoded.
         """
         original_model = body.get("model", "claude-3-5-sonnet-20241022")
-        litellm_model = self.map_model_id(original_model)
+        litellm_model = original_model
+        if isinstance(original_model, str) and "/" in original_model:
+            possible_prefix = original_model.split("/", 1)[0]
+            if possible_prefix in PROVIDER_REGISTRY or possible_prefix in ("ollama", "vllm", "llama", "llamacpp", "openrouter"):
+                litellm_model = original_model.split("/", 1)[1]
+                kwargs_provider_hint = possible_prefix
+            else:
+                kwargs_provider_hint = None
+        else:
+            kwargs_provider_hint = None
+        if kwargs_provider_hint is None:
+            litellm_model = self.map_model_id(original_model)
 
         try:
             messages = self._convert_messages_for_litellm(body.get("messages", []))
@@ -1054,7 +1080,18 @@ class LiteLLMBackend(Backend):
             BackendResponse with OpenAI-format body
         """
         original_model = body.get("model", "gpt-4")
-        litellm_model = self.map_model_id(original_model)
+        litellm_model = original_model
+        if isinstance(original_model, str) and "/" in original_model:
+            possible_prefix = original_model.split("/", 1)[0]
+            if possible_prefix in PROVIDER_REGISTRY or possible_prefix in ("ollama", "vllm", "llama", "llamacpp", "openrouter"):
+                litellm_model = original_model.split("/", 1)[1]
+                kwargs_provider_hint = possible_prefix
+            else:
+                kwargs_provider_hint = None
+        else:
+            kwargs_provider_hint = None
+        if kwargs_provider_hint is None:
+            litellm_model = self.map_model_id(original_model)
 
         try:
             # Build kwargs - messages already in OpenAI format
@@ -1229,7 +1266,18 @@ class LiteLLMBackend(Backend):
         Yields SSE-formatted strings ready to send to the client.
         """
         original_model = body.get("model", "gpt-4")
-        litellm_model = self.map_model_id(original_model)
+        litellm_model = original_model
+        if isinstance(original_model, str) and "/" in original_model:
+            possible_prefix = original_model.split("/", 1)[0]
+            if possible_prefix in PROVIDER_REGISTRY or possible_prefix in ("ollama", "vllm", "llama", "llamacpp", "openrouter"):
+                litellm_model = original_model.split("/", 1)[1]
+                kwargs_provider_hint = possible_prefix
+            else:
+                kwargs_provider_hint = None
+        else:
+            kwargs_provider_hint = None
+        if kwargs_provider_hint is None:
+            litellm_model = self.map_model_id(original_model)
 
         try:
             kwargs: dict[str, Any] = {
