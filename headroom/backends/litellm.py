@@ -497,13 +497,14 @@ class LiteLLMBackend(Backend):
                 region_prefix = _bedrock_region_prefix(self.region or "us-east-1")
                 return f"bedrock/{region_prefix}.anthropic.{anthropic_model}-v1:0"
 
-        # Pass-through providers: prepend provider prefix
+        # Pass-through providers: do not prepend provider prefix here.
+        # Instead we prefer to pass the raw model name and supply
+        # `custom_llm_provider` / `api_base` to LiteLLM so it can route correctly.
         if self._config.pass_through:
-            # If already has provider prefix, use as-is
             if anthropic_model.startswith(f"{self.provider}/"):
-                return anthropic_model
-            # Otherwise prepend provider/
-            return f"{self.provider}/{anthropic_model}"
+                # strip the provider prefix if present
+                return anthropic_model.split("/", 1)[1]
+            return anthropic_model
 
         # If already has provider prefix, use as-is
         if "/" in anthropic_model:
