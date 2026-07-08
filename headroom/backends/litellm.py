@@ -755,10 +755,9 @@ class LiteLLMBackend(Backend):
                     kwargs["api_base"] = kwargs["base_url"]
             except Exception:
                 pass
-            logger.debug(f"LiteLLM request: model={litellm_model} provider={self.provider}")
-
-            # Make the call
-            response = await acompletion(**kwargs)
+            logger.info(
+                f\"LiteLLM call: model={litellm_model} provider={self.provider} "
+                f\"custom_llm_provider={kwargs.get('custom_llm_provider')} api_base={kwargs.get('api_base')} base_url={kwargs.get('base_url')}\")\n\n            # Make the call\n            response = await acompletion(**kwargs)
 
             # Convert to Anthropic format
             anthropic_response = self._to_anthropic_response(response, original_model)
@@ -1104,10 +1103,7 @@ class LiteLLMBackend(Backend):
                     kwargs["api_base"] = kwargs["base_url"]
             except Exception:
                 pass
-            logger.debug(f"LiteLLM OpenAI request: model={litellm_model} provider={self.provider}")
-
-            # Make the call
-            response = await acompletion(**kwargs)
+            logger.info(\n+                f\"LiteLLM OpenAI call: model={litellm_model} provider={self.provider} \"\n+                f\"custom_llm_provider={kwargs.get('custom_llm_provider')} api_base={kwargs.get('api_base')} base_url={kwargs.get('base_url')}\")\n+\n+            # Make the call\n+            response = await acompletion(**kwargs)
 
             # Build the usage block. LiteLLM normalizes prompt-cache stats from
             # multiple providers (Anthropic, Bedrock-Claude, OpenAI prompt-caching,
