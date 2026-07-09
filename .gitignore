@@ -1,3 +1,30 @@
+# Node and editor artifacts
+node_modules/
+packages/**/node_modules/
+npm-debug.log*
+yarn-error.log
+
+# Python
+__pycache__/
+.venv/
+venv/
+env/
+*.pyc
+
+# Large media / generated assets
+*.gif
+*.png
+*.jpg
+*.jpeg
+*.mp4
+
+# Lock files
+uv.lock
+package-lock.json
+
+# OS
+.DS_Store
+
 # fastembed model cache (auto-downloaded ONNX weights, ~30 MB+).
 # Should NEVER be committed — bloats the repo significantly.
 .fastembed_cache/
