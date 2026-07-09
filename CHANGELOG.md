@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.25.0](https://github.com/lewis-jamie/headroomai/compare/v0.24.0...v0.25.0) (2026-07-09)
+
+
+### Features
+
+* support Python 3.14+ via pyo3 abi3 stable ABI ([#516](https://github.com/lewis-jamie/headroomai/issues/516)) ([9819322](https://github.com/lewis-jamie/headroomai/commit/9819322cf4f36176da0b13f423f24d278b10518b))
+
+
+### Bug Fixes
+
+* logger string quoting in early fallback ([616bb44](https://github.com/lewis-jamie/headroomai/commit/616bb448fefd971edde41a00588b0b1aa8269d4d))
+
+
+### Reverts
+
+* restore litellm.py to 5f411c8 before patching ([9093f70](https://github.com/lewis-jamie/headroomai/commit/9093f704d77766b5da15a9a8b2c07fd6a5dff25b))
+
 ## [0.24.0](https://github.com/chopratejas/headroom/compare/v0.23.0...v0.24.0) (2026-06-08)
 
 
