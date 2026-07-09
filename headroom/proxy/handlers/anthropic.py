@@ -1849,6 +1849,85 @@ class AnthropicHandlerMixin:
                     )
 
             # Direct Anthropic API
+            # If Anthropic API key is missing or a dummy, allow a local fallback
+            # to a configured provider (e.g., ollama, llama, vllm) to avoid
+            # requiring an upstream API key. Configure via HEADROOM_ANTHROPIC_FALLBACK.
+            import os as _os
+
+            anth_key = _os.environ.get("ANTHROPIC_API_KEY", "") or ""
+            fallback_provider = _os.environ.get("HEADROOM_ANTHROPIC_FALLBACK", "") or ""
+            # Treat placeholder keys as absent
+            if (not anth_key or anth_key.startswith("sk-ant-dummy")) and fallback_provider:
+                # Map Claude-like model names to a reasonable local model when possible
+                model_name = model or ""
+                mapped_model = None
+                if "claude" in model_name.lower():
+                    # Default local substitute: Ollama qwen2.5-coder:3b (changeable via env)
+                    mapped_model = _os.environ.get("HEADROOM_ANTHROPIC_FALLBACK_MODEL", "ollama/qwen2.5-coder:3b")
+                else:
+                    # If the client supplied an explicit provider prefix (e.g., ollama/...), keep it
+                    if isinstance(model_name, str) and "/" in model_name:
+                        mapped_model = model_name
+                    else:
+                        mapped_model = f"{fallback_provider}/{model_name or 'qwen2.5-coder:3b'}"
+
+                try:
+                    # Lazy-load the LiteLLM backend class and invoke it as a fallback
+                    from headroom.providers.registry import _load_litellm_backend
+
+                    litellm_cls = _load_litellm_backend()
+                    fallback_backend = litellm_cls(provider=fallback_provider)
+                    # Replace model in body with mapped_model for fallback call
+                    fallback_body = dict(body)
+                    fallback_body["model"] = mapped_model
+                    backend_response = await fallback_backend.send_message(fallback_body, headers)
+                    # Reuse the same post-send pipeline emissions as the Bedrock path
+                    self.pipeline_extensions.emit(
+                        PipelineStage.POST_SEND,
+                        operation="proxy.request",
+                        request_id=request_id,
+                        provider=fallback_provider,
+                        model=mapped_model,
+                        messages=body["messages"],
+                        tools=tools,
+                        response=backend_response.body,
+                        metadata={"path": "/v1/messages", "stream": False, "status_code": backend_response.status_code},
+                    )
+                    await _finalize_pre_upstream()
+                    if backend_response.error:
+                        return JSONResponse(status_code=backend_response.status_code, content=backend_response.body)
+                    usage = backend_response.body.get("usage", {})
+                    output_tokens = usage.get("output_tokens", 0)
+                    await self._record_request_outcome(
+                        RequestOutcome(
+                            request_id=request_id,
+                            provider=fallback_provider,
+                            model=mapped_model,
+                            original_tokens=original_tokens,
+                            optimized_tokens=optimized_tokens,
+                            output_tokens=output_tokens,
+                            tokens_saved=tokens_saved,
+                            attempted_input_tokens=optimized_tokens + tokens_saved,
+                            total_latency_ms=(time.time() - start_time) * 1000,
+                            overhead_ms=optimization_latency,
+                            pipeline_timing=pipeline_timing,
+                            transforms_applied=tuple(transforms_applied),
+                            num_messages=len(body.get("messages", [])),
+                            tags=tags,
+                            client=client,
+                            turn_id=compute_turn_id(model, body.get("system"), body.get("messages")),
+                            request_messages=body.get("messages") if self.config.log_full_messages else None,
+                        )
+                    )
+                    # Return response to client
+                    response_headers = dict(backend_response.headers) if getattr(backend_response, "headers", None) else {}
+                    response_headers.pop("content-encoding", None)
+                    response_headers.pop("content-length", None)
+                    return Response(content=json.dumps(backend_response.body).encode(), status_code=backend_response.status_code, headers=response_headers)
+                except Exception as e:
+                    logger.warning(f"[{request_id}] Fallback to local provider {fallback_provider} failed: {e}")
+                    # Fall through to attempting direct Anthropic API below.
+
             url = f"{self.ANTHROPIC_API_URL}/v1/messages"
 
             try:
