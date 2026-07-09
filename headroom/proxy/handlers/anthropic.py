@@ -1858,6 +1858,7 @@ class AnthropicHandlerMixin:
             fallback_provider = _os.environ.get("HEADROOM_ANTHROPIC_FALLBACK", "") or ""
             # Treat placeholder keys as absent
             if (not anth_key or anth_key.startswith("sk-ant-dummy")) and fallback_provider:
+                logger.info(f"[{request_id}] Anthropic fallback configured: anth_key_present={bool(anth_key and not anth_key.startswith('sk-ant-dummy'))}, fallback_provider={fallback_provider}, fallback_model_env={_os.environ.get('HEADROOM_ANTHROPIC_FALLBACK_MODEL')}")
                 # Map Claude-like model names to a reasonable local model when possible
                 model_name = model or ""
                 mapped_model = None
@@ -1872,8 +1873,10 @@ class AnthropicHandlerMixin:
                         mapped_model = f"{fallback_provider}/{model_name or 'qwen2.5-coder:3b'}"
 
                 try:
+                    logger.info(f"[{request_id}] Anthropic fallback chosen mapped_model={mapped_model}")
                     # Direct Ollama HTTP fallback (preferred for local, no API key)
                     if fallback_provider.lower() == "ollama":
+                        logger.info(f"[{request_id}] Using Ollama HTTP fallback at { _os.environ.get('OLLAMA_HOST','http://127.0.0.1:11434') } model={mapped_model}")
                         from httpx import AsyncClient
 
                         ollama_host = _os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
