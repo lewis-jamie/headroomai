@@ -614,8 +614,8 @@ class AnthropicHandlerMixin:
                     # Apply rewrite and annotate for downstream logging
                     body["model"] = mapped_model_early
                     model = mapped_model_early
-                    headers = getattr(request, 'headers', {}) or {}
-                    logger.info(f\"[{request_id}] Early Anthropic->local fallback applied: provider={fallback_provider_early}, model={mapped_model_early}\")
+                    headers = getattr(request, "headers", {}) or {}
+                    logger.info(f"[{request_id}] Early Anthropic->local fallback applied: provider={fallback_provider_early}, model={mapped_model_early}")
             except Exception as _:
                 # Non-fatal; continue without early fallback
                 pass
