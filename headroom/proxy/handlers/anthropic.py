@@ -592,6 +592,33 @@ class AnthropicHandlerMixin:
                 )
             model = body.get("model", "unknown")
             messages = body.get("messages", [])
+
+            # Early fallback rewrite: if Anthropic API key is missing/dummy and a fallback provider
+            # is configured, rewrite the request model to route through local provider early in the pipeline.
+            # This prevents pre-upstream subsystems (litellm calls) from attempting to call Anthropic.
+            try:
+                import os as _os
+
+                anth_key_early = _os.environ.get("ANTHROPIC_API_KEY", "") or ""
+                fallback_provider_early = _os.environ.get("HEADROOM_ANTHROPIC_FALLBACK", "") or ""
+                if (not anth_key_early or anth_key_early.startswith("sk-ant-dummy")) and fallback_provider_early:
+                    # Determine mapped model
+                    model_name_early = model or ""
+                    if "claude" in model_name_early.lower():
+                        mapped_model_early = _os.environ.get("HEADROOM_ANTHROPIC_FALLBACK_MODEL", f"{fallback_provider_early}/qwen2.5-coder:3b")
+                    elif isinstance(model_name_early, str) and "/" in model_name_early:
+                        mapped_model_early = model_name_early
+                    else:
+                        mapped_model_early = f"{fallback_provider_early}/{model_name_early or 'qwen2.5-coder:3b'}"
+
+                    # Apply rewrite and annotate for downstream logging
+                    body["model"] = mapped_model_early
+                    model = mapped_model_early
+                    headers = getattr(request, 'headers', {}) or {}
+                    logger.info(f\"[{request_id}] Early Anthropic->local fallback applied: provider={fallback_provider_early}, model={mapped_model_early}\")
+            except Exception as _:
+                # Non-fatal; continue without early fallback
+                pass
             with stage_timer.measure("deep_copy"):
                 original_client_messages = copy.deepcopy(messages)
             input_event = self.pipeline_extensions.emit(
