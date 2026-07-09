@@ -1307,6 +1307,18 @@ class OpenAIHandlerMixin:
                 },
             )
         model = body.get("model", "unknown")
+        # Apply global AI-agnostic fallback rewrite (no upstream auth + fallback configured)
+        try:
+            from headroom.proxy.fallback import apply_global_fallback
+
+            headers_dict = dict(request.headers.items()) if getattr(request, "headers", None) else {}
+            new_body, applied, debug_msg = apply_global_fallback(headers_dict, body, request_id)
+            if applied:
+                logger.info(f"[{request_id}] Global fallback applied (openai): {debug_msg}")
+                body = new_body
+                model = body.get("model", model)
+        except Exception:
+            pass
         messages = body.get("messages", [])
         original_client_messages = copy.deepcopy(messages)
         input_event = self.pipeline_extensions.emit(
