@@ -1872,16 +1872,90 @@ class AnthropicHandlerMixin:
                         mapped_model = f"{fallback_provider}/{model_name or 'qwen2.5-coder:3b'}"
 
                 try:
-                    # Lazy-load the LiteLLM backend class and invoke it as a fallback
+                    # Direct Ollama HTTP fallback (preferred for local, no API key)
+                    if fallback_provider.lower() == "ollama":
+                        from httpx import AsyncClient
+
+                        ollama_host = _os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434")
+                        if "/" in mapped_model:
+                            _, ollama_model = mapped_model.split("/", 1)
+                        else:
+                            ollama_model = mapped_model
+
+                        payload = {"model": ollama_model, "messages": body.get("messages", [])}
+                        async with AsyncClient(timeout=60.0) as client_http:
+                            resp = await client_http.post(f"{ollama_host.rstrip('/')}/api/chat", json=payload)
+                            text = resp.text
+                            # Parse NDJSON streaming response, take last message content
+                            last_obj = None
+                            for line in text.splitlines():
+                                line = line.strip()
+                                if not line:
+                                    continue
+                                try:
+                                    obj = json.loads(line)
+                                    last_obj = obj
+                                except Exception:
+                                    continue
+                            if last_obj and "message" in last_obj:
+                                content = last_obj["message"].get("content", "")
+                            else:
+                                content = text
+
+                        backend_body = {
+                            "id": "ollama-fallback",
+                            "object": "chat.completion",
+                            "choices": [{"message": {"role": "assistant", "content": content}}],
+                            "usage": {},
+                        }
+                        backend_response = type("B", (), {"body": backend_body, "status_code": resp.status_code, "headers": dict(resp.headers), "error": None})
+                        self.pipeline_extensions.emit(
+                            PipelineStage.POST_SEND,
+                            operation="proxy.request",
+                            request_id=request_id,
+                            provider=fallback_provider,
+                            model=ollama_model,
+                            messages=body["messages"],
+                            tools=tools,
+                            response=backend_body,
+                            metadata={"path": "/api/chat (ollama)", "stream": False, "status_code": resp.status_code},
+                        )
+                        await _finalize_pre_upstream()
+                        usage = backend_body.get("usage", {})
+                        output_tokens = usage.get("output_tokens", 0)
+                        await self._record_request_outcome(
+                            RequestOutcome(
+                                request_id=request_id,
+                                provider=fallback_provider,
+                                model=ollama_model,
+                                original_tokens=original_tokens,
+                                optimized_tokens=optimized_tokens,
+                                output_tokens=output_tokens,
+                                tokens_saved=tokens_saved,
+                                attempted_input_tokens=optimized_tokens + tokens_saved,
+                                total_latency_ms=(time.time() - start_time) * 1000,
+                                overhead_ms=optimization_latency,
+                                pipeline_timing=pipeline_timing,
+                                transforms_applied=tuple(transforms_applied),
+                                num_messages=len(body.get("messages", [])),
+                                tags=tags,
+                                client=client,
+                                turn_id=compute_turn_id(model, body.get("system"), body.get("messages")),
+                                request_messages=body.get("messages") if self.config.log_full_messages else None,
+                            )
+                        )
+                        response_headers = dict(backend_response.headers) if getattr(backend_response, "headers", None) else {}
+                        response_headers.pop("content-encoding", None)
+                        response_headers.pop("content-length", None)
+                        return Response(content=json.dumps(backend_body).encode(), status_code=backend_response.status_code, headers=response_headers)
+                    # Generic litellm fallback for other local providers
                     from headroom.providers.registry import _load_litellm_backend
 
                     litellm_cls = _load_litellm_backend()
                     fallback_backend = litellm_cls(provider=fallback_provider)
-                    # Replace model in body with mapped_model for fallback call
                     fallback_body = dict(body)
                     fallback_body["model"] = mapped_model
                     backend_response = await fallback_backend.send_message(fallback_body, headers)
-                    # Reuse the same post-send pipeline emissions as the Bedrock path
                     self.pipeline_extensions.emit(
                         PipelineStage.POST_SEND,
                         operation="proxy.request",
@@ -1919,7 +1993,6 @@ class AnthropicHandlerMixin:
                             request_messages=body.get("messages") if self.config.log_full_messages else None,
                         )
                     )
-                    # Return response to client
                     response_headers = dict(backend_response.headers) if getattr(backend_response, "headers", None) else {}
                     response_headers.pop("content-encoding", None)
                     response_headers.pop("content-length", None)
